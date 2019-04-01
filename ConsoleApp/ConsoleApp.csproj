@@ -101,7 +101,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ClassGenerator.cs" />
-    <Compile Include="CodeGeneration.cs" />
+    <Compile Include="DataViewGenerator.cs" />
     <Compile Include="DynamicClass.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

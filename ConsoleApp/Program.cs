@@ -13,14 +13,9 @@ namespace ConsoleApp
     {
         static void Main(string[] args)
         {
-
             MLContext mlContext = new MLContext();
 
-            //IDataView trainingDataView = mlContext.Data.LoadFromTextFile<IrisData>(path: "iris-data.txt", hasHeader: false, separatorChar: ',');
-
-            // or
-
-            ClassGenerator classGenerator = new ClassGenerator("GeneratedIris", "ConsoleApp");
+            ClassGenerator classGenerator = new ClassGenerator("GeneratedIris", "CustomClass");
             classGenerator.AddField("SepalLength", typeof(float), System.CodeDom.MemberAttributes.Public);
             classGenerator.AddField("SepalWidth", typeof(float), System.CodeDom.MemberAttributes.Public);
             classGenerator.AddField("PetalLength", typeof(float), System.CodeDom.MemberAttributes.Public);
@@ -28,18 +23,20 @@ namespace ConsoleApp
             classGenerator.AddField("Label", typeof(string), System.CodeDom.MemberAttributes.Public);
             classGenerator.Compile();
 
-
             List<object> generatedDataSet = new List<object>();
 
             dataset.ToList().ForEach((d) =>
             {
-                //generatedDataSet.Add(GetDynamicClass(d, classGenerator.GetInstance()));
-                generatedDataSet.Add(d);
+                generatedDataSet.Add(GetDynamicClass(d, classGenerator.GetInstance()));
             });
-            generatedDataSet[0].GetType();
-            dataset[0].GetType();
-            IDataView trainingDataView = mlContext.Data.LoadFromEnumerable(generatedDataSet);
 
+            var instance = classGenerator.GetInstance().GetType();
+            DataViewGenerator listGenerator = new DataViewGenerator("ListIris", "CustomGenerator", instance, classGenerator.NamespaceName);
+            var type = listGenerator.GeneratorType;
+            var methodInfo = type.GetMethod("GetDataView");
+            var dataView = methodInfo.Invoke(null, new object[] { generatedDataSet.ToList() });
+
+            IDataView trainingDataView = (IDataView)dataView;
             trainingDataView.Schema.ToList().Add(new DataViewSchema.Column());
 
             var pipeline = mlContext.Transforms.Conversion.MapValueToKey("Label")

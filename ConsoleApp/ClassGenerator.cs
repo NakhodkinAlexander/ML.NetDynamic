@@ -22,11 +22,11 @@ namespace ConsoleApp
         private CodeTypeDeclaration customClass = null;
         private CompilerResults compilerResults = null;
 
-        public Type ClassType = null;
+        public Type ClassType { get; private set; } = null;
+        public string NamespaceName { get; private set; } = null;
 
         public ClassGenerator(string className,string namespaceName, IEnumerable<string> references = null)
         {
-            // Add an assembly reference.
             references?.ToList().ForEach((reference) =>
             {
                 compilerParameters.ReferencedAssemblies.Add(reference);
@@ -34,7 +34,9 @@ namespace ConsoleApp
             compilerParameters.ReferencedAssemblies.Add("System.dll");
             compilerParameters.GenerateExecutable = false;
             compilerParameters.GenerateInMemory = false;
-            compilerParameters.OutputAssembly = "OutputAssembly";
+
+            this.NamespaceName = namespaceName;
+            compilerParameters.OutputAssembly = $"{namespaceName}.dll"; ;
 
             this.namespaceName = namespaceName;
             namespaces = new CodeNamespace(namespaceName);
@@ -80,7 +82,6 @@ namespace ConsoleApp
         }
 
 
-
         public void Compile()
         {
             AddConstructor();
@@ -108,7 +109,6 @@ namespace ConsoleApp
             {
                 Assembly assembly = compilerResults.CompiledAssembly;
                 object instance = assembly.CreateInstance($"{namespaceName}.{className}", true, BindingFlags.Default, null, null, null, null);
-                var obj2 = Activator.CreateInstance(instance.GetType());
                 return instance;
             }
             else

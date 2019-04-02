@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace ConsoleApp
 {
-    public class DataViewGenerator
+    public class MLTypesGenerator
     {
         private string namespaceName = null;
         private string className = null;
@@ -23,11 +23,13 @@ namespace ConsoleApp
         private CodeTypeDeclaration customClass = null;
         private CompilerResults compilerResults = null;
 
-        public Type ListType { get; private set; } = null;
+        ClassGenerator datSetClass = null;
+        ClassGenerator labelClass = null;
+
         public Type GeneratorType { get; private set; } = null;
         public string OutputDll { get; private set; } = null;
 
-        public DataViewGenerator(string className, string namespaceName, Type listType, string customAssemblyNamespace)
+        public MLTypesGenerator(string className, string namespaceName, ClassGenerator datSetClass, ClassGenerator labelClass)
         {
             // Add an assembly reference.
             compilerParameters.ReferencedAssemblies.AddRange(new [] 
@@ -46,7 +48,8 @@ namespace ConsoleApp
                 "Microsoft.ML.Data.dll",
                 "Microsoft.ML.Core.dll",
                 "Microsoft.Data.DataView.dll",
-                $"{customAssemblyNamespace}.dll"
+                $"{datSetClass.namespaceName}.dll",
+                $"{labelClass.namespaceName}.dll"
             });
             compilerParameters.GenerateExecutable = false;
             compilerParameters.GenerateInMemory = false;
@@ -63,18 +66,21 @@ namespace ConsoleApp
             namespaces.Imports.Add(new CodeNamespaceImport("Microsoft.ML"));
             namespaces.Imports.Add(new CodeNamespaceImport("Microsoft.ML.Data"));
             namespaces.Imports.Add(new CodeNamespaceImport("Microsoft.Data.DataView"));
-            namespaces.Imports.Add(new CodeNamespaceImport($"{customAssemblyNamespace}"));
+            namespaces.Imports.Add(new CodeNamespaceImport($"{datSetClass.namespaceName}"));
+            namespaces.Imports.Add(new CodeNamespaceImport($"{labelClass.namespaceName}"));
             compileUnit.Namespaces.Add(namespaces);
 
             this.className = className;
             customClass = new CodeTypeDeclaration(className);
             customClass.IsClass = true;
             customClass.TypeAttributes = System.Reflection.TypeAttributes.Public;
-            this.ListType = listType;
+
+            this.datSetClass = datSetClass;
+            this.labelClass = labelClass;
             this.Compile();
         }
 
-        private void AddMethod()
+        private void AddDataViewGenerator()
         {
             CodeMemberMethod toStringMethod = new CodeMemberMethod();
             toStringMethod.Attributes =
@@ -84,7 +90,7 @@ namespace ConsoleApp
             toStringMethod.Name = "GetDataView";
 
             CodeSnippetExpression snippet1 = new CodeSnippetExpression("MLContext mlContext = new MLContext();");
-            CodeSnippetExpression snippet2 = new CodeSnippetExpression($"IDataView trainingDataView = mlContext.Data.LoadFromEnumerable(listToParse.Select(d => ({this.ListType.Name})d).ToList());");
+            CodeSnippetExpression snippet2 = new CodeSnippetExpression($"IDataView trainingDataView = mlContext.Data.LoadFromEnumerable(listToParse.Select(d => ({this.datSetClass.ClassType.Name})d).ToList());");
             CodeExpressionStatement stmt1 = new CodeExpressionStatement(snippet1);
             CodeExpressionStatement stmt2 = new CodeExpressionStatement(snippet2);
             toStringMethod.Statements.Add(stmt1);
@@ -98,6 +104,27 @@ namespace ConsoleApp
             customClass.Members.Add(toStringMethod);
         }
 
+        private void AddPredictionEngineGenerator()
+        {
+            CodeMemberMethod toStringMethod = new CodeMemberMethod();
+            toStringMethod.Attributes =
+                MemberAttributes.Public | MemberAttributes.Static;
+            toStringMethod.Parameters.Add(new CodeParameterDeclarationExpression("TransformerChain<Microsoft.ML.Transforms.KeyToValueMappingTransformer>", "model"));
+
+            toStringMethod.Name = "GetPredictionEngine";
+
+            CodeSnippetExpression snippet = new CodeSnippetExpression("MLContext mlContext = new MLContext();");
+            CodeExpressionStatement stmt = new CodeExpressionStatement(snippet);
+            toStringMethod.Statements.Add(stmt);
+
+            toStringMethod.ReturnType =
+                new CodeTypeReference($"PredictionEngine<{datSetClass.namespaceName}.{datSetClass.className}, {labelClass.namespaceName}.{labelClass.className}>");
+
+
+            toStringMethod.Statements.Add(new CodeMethodReturnStatement(new CodeArgumentReferenceExpression($"model.CreatePredictionEngine<{datSetClass.namespaceName}.{datSetClass.className}, {labelClass.namespaceName}.{labelClass.className}>(mlContext)")));
+            customClass.Members.Add(toStringMethod);
+        }
+
         private void AddConstructor()
         {
             CodeConstructor constructor = new CodeConstructor();
@@ -107,14 +134,10 @@ namespace ConsoleApp
             customClass.Members.Add(constructor);
         }
 
-        public void Build()
-        {
-            Compile();
-        }
-
         private void Compile()
         {
-            AddMethod();
+            AddDataViewGenerator();
+            AddPredictionEngineGenerator();
             AddConstructor();
             namespaces.Types.Add(customClass);
             compilerResults = provider.CompileAssemblyFromDom(compilerParameters, compileUnit);

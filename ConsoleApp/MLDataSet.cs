@@ -12,7 +12,7 @@ namespace Decisions.ML
     public class MLDataRow
     {
         public string ID { get; set; }
-        public Dictionary<string, object>[] Data { get; set; }
+        public Dictionary<string, object> Data { get; set; }
     }
 
     public class MLFeature

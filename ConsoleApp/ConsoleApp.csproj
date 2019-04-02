@@ -101,8 +101,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ClassGenerator.cs" />
-    <Compile Include="DataViewGenerator.cs" />
+    <Compile Include="MLHelper.cs" />
+    <Compile Include="MLModel.cs" />
+    <Compile Include="MLTypesGenerator.cs" />
     <Compile Include="DynamicClass.cs" />
+    <Compile Include="MLDataSet.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

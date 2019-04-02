@@ -15,60 +15,54 @@ namespace ConsoleApp
         {
             MLContext mlContext = new MLContext();
 
-            ClassGenerator classGenerator = new ClassGenerator("GeneratedIris", "CustomClass");
-            classGenerator.AddField("SepalLength", typeof(float), System.CodeDom.MemberAttributes.Public);
-            classGenerator.AddField("SepalWidth", typeof(float), System.CodeDom.MemberAttributes.Public);
-            classGenerator.AddField("PetalLength", typeof(float), System.CodeDom.MemberAttributes.Public);
-            classGenerator.AddField("PetalWidth", typeof(float), System.CodeDom.MemberAttributes.Public);
-            classGenerator.AddField("Label", typeof(string), System.CodeDom.MemberAttributes.Public);
-            classGenerator.Compile();
+            ClassGenerator classGenerator = MLHelper.GenerateDataSetClass(typeof(IrisData), "TestIris", "IrisNamespace");
+            ClassGenerator labelClassGenerator = MLHelper.GenerateLabelClass("IrisLabel", "IrisLabelNamespace");
 
             List<object> generatedDataSet = new List<object>();
 
             dataset.ToList().ForEach((d) =>
             {
-                generatedDataSet.Add(GetDynamicClass(d, classGenerator.GetInstance()));
+                generatedDataSet.Add(CopyObjectFields(d, classGenerator.GetInstance()));
             });
 
-            var instance = classGenerator.GetInstance().GetType();
-            DataViewGenerator listGenerator = new DataViewGenerator("ListIris", "CustomGenerator", instance, classGenerator.NamespaceName);
-            var type = listGenerator.GeneratorType;
-            var methodInfo = type.GetMethod("GetDataView");
-            var dataView = methodInfo.Invoke(null, new object[] { generatedDataSet.ToList() });
+            MLTypesGenerator typesGenerator = MLHelper.CreateTypesGenarator(classGenerator, labelClassGenerator);
 
-            IDataView trainingDataView = (IDataView)dataView;
+            IDataView trainingDataView = MLHelper.GetDataView(typesGenerator, generatedDataSet);
             trainingDataView.Schema.ToList().Add(new DataViewSchema.Column());
 
             var pipeline = mlContext.Transforms.Conversion.MapValueToKey("Label")
-                .Append(mlContext.Transforms.Concatenate("Features", "SepalLength", "SepalWidth", "PetalLength", "PetalWidth"))
+                .Append(mlContext.Transforms.Concatenate("Features", new string[] { "SepalLength", "SepalWidth", "PetalLength", "PetalWidth" }))
                 .AppendCacheCheckpoint(mlContext)
                 .Append(mlContext.MulticlassClassification.Trainers.StochasticDualCoordinateAscent(labelColumnName: "Label", featureColumnName: "Features"))
                 .Append(mlContext.Transforms.Conversion.MapKeyToValue("PredictedLabel"));
 
-
             TransformerChain<Microsoft.ML.Transforms.KeyToValueMappingTransformer> model = pipeline.Fit(trainingDataView);
 
-            var prediction = model.CreatePredictionEngine<IrisData, IrisPrediction>(mlContext).Predict(
-                new IrisData()
-                {
-                    SepalLength = 5.9f,
-                    SepalWidth = 3.0f,
-                    PetalLength = 5.1f,
-                    PetalWidth = 1.8f,
-                });
+            var predictionEngine = MLHelper.GetPredictionEngine(typesGenerator, model);
+            var methodInfo = predictionEngine.GetType().GetMethod("Predict", new[] { classGenerator.ClassType });
 
-            Console.WriteLine(prediction.PredictedLabels);
+            var prediction = MLHelper.Predict(predictionEngine, classGenerator, CopyObjectFields(new IrisData()
+            {
+                SepalLength = 5.9f,
+                SepalWidth = 3.0f,
+                PetalLength = 5.1f,
+                PetalWidth = 1.8f,
+            }, classGenerator.GetInstance()));
+
+            Console.WriteLine(prediction.ToString());
 
             Console.ReadLine();
         }
 
-        static IList CreateList(Type t)
+        private static object CopyObjectFields(object oldClass, object newClass)
         {
-            var listType = typeof(List<>);
-            var constructedListType = listType.MakeGenericType(t);
+            Type instanceType = oldClass.GetType();
+            instanceType.GetFields().ToList().ForEach((field) =>
+            {
+                newClass.GetType().GetField(field.Name).SetValue(newClass, field.GetValue(oldClass));
+            });
 
-            var instance = (IList)Activator.CreateInstance(constructedListType);
-            return instance;
+            return newClass;
         }
 
         public class IrisData
@@ -88,17 +82,6 @@ namespace ConsoleApp
         {
             [ColumnName("PredictedLabel")]
             public string PredictedLabels;
-        }
-
-        private static object GetDynamicClass(IrisData irisData, object newIris)
-        {
-            Type instanceType = newIris.GetType();
-            irisData.GetType().GetFields().ToList().ForEach((field) =>
-            {
-                instanceType.GetField(field.Name).SetValue(newIris, field.GetValue(irisData));
-            });
-
-            return newIris;
         }
 
         private static readonly IrisData[] dataset = new IrisData[] {

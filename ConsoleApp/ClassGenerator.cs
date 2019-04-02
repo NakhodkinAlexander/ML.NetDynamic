@@ -5,15 +5,13 @@ using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ConsoleApp
 {
     public class ClassGenerator
     {
-        private string namespaceName = null;
-        private string className = null;
+        public readonly string namespaceName = null;
+        public readonly string className = null;
 
         private CSharpCodeProvider provider = new CSharpCodeProvider();
         private CompilerParameters compilerParameters = new CompilerParameters();
@@ -23,23 +21,31 @@ namespace ConsoleApp
         private CompilerResults compilerResults = null;
 
         public Type ClassType { get; private set; } = null;
-        public string NamespaceName { get; private set; } = null;
 
-        public ClassGenerator(string className,string namespaceName, IEnumerable<string> references = null)
+        public ClassGenerator(string className, string namespaceName, IEnumerable<string> references = null)
         {
             references?.ToList().ForEach((reference) =>
             {
                 compilerParameters.ReferencedAssemblies.Add(reference);
             });
-            compilerParameters.ReferencedAssemblies.Add("System.dll");
+            compilerParameters.ReferencedAssemblies.AddRange(new[]
+            {
+                "System.dll",
+                "Microsoft.ML.Data.dll",
+                "Microsoft.ML.Core.dll",
+                "Microsoft.Data.DataView.dll",
+                "netstandard.dll",
+            });
             compilerParameters.GenerateExecutable = false;
             compilerParameters.GenerateInMemory = false;
 
-            this.NamespaceName = namespaceName;
-            compilerParameters.OutputAssembly = $"{namespaceName}.dll"; ;
+            compilerParameters.OutputAssembly = $"{namespaceName}.dll";
 
             this.namespaceName = namespaceName;
             namespaces = new CodeNamespace(namespaceName);
+            namespaces.Imports.Add(new CodeNamespaceImport("Microsoft.ML"));
+            namespaces.Imports.Add(new CodeNamespaceImport("Microsoft.ML.Data"));
+            namespaces.Imports.Add(new CodeNamespaceImport("Microsoft.Data.DataView"));
             compileUnit.Namespaces.Add(namespaces);
 
             this.className = className;
@@ -48,10 +54,21 @@ namespace ConsoleApp
             customClass.TypeAttributes = System.Reflection.TypeAttributes.Public;
         }
 
-        public void AddField(string fieldName, Type type, MemberAttributes memberAttributes = MemberAttributes.Private)
+        public void AddField(string fieldName, Type type, MemberAttributes memberAttributes = MemberAttributes.Private, Dictionary<string, string> keys = null)
         {
             CodeMemberField field = new CodeMemberField(type.FullName, fieldName);
             field.Attributes = memberAttributes;
+
+            if (keys != null)
+            {
+                foreach (var item in keys)
+                {
+                    var attr = new CodeAttributeDeclaration(item.Key);
+                    attr.Arguments.Add(new CodeAttributeArgument(new CodePrimitiveExpression(item.Value)));
+                    field.CustomAttributes.Add(attr);
+                }
+            }
+
             customClass.Members.Add(field);
         }
 
@@ -95,7 +112,6 @@ namespace ConsoleApp
                     exception.Data.Add(ce.ToString(), ce);
                 }
 
-                compilerResults = null;
                 throw exception;
             }
             Assembly assembly = compilerResults.CompiledAssembly;

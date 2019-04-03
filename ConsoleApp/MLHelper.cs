@@ -56,7 +56,7 @@ namespace ConsoleApp
 
         public static MLTypesGenerator CreateTypesGenarator(ClassGenerator classGenerator, ClassGenerator labelClassGenerator)
         {
-            MLTypesGenerator typesGenerator = new MLTypesGenerator("ListIris", "CustomGenerator", classGenerator, labelClassGenerator);
+            MLTypesGenerator typesGenerator = new MLTypesGenerator($"{classGenerator.className}TypesGnerator", $"{classGenerator.className}TypesGneratorNamespace", classGenerator, labelClassGenerator);
             return typesGenerator;
         }
 

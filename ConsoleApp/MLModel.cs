@@ -17,35 +17,50 @@ namespace ConsoleApp
         public IDataView TrainingDataView { get; set; }
         MLFeature[] features;
 
-        public MLModel(MLDataSet mLDataSet, string modelName)
+        private string modelName = null;
+        private string labelFieldName = null;
+
+        public MLModel(MLFeature[] features, string modelName)
         {
-            DataSetClass = MLHelper.GenerateDataSetClass(mLDataSet.Features, modelName, $"{modelName}Namespace");
+            this.modelName = modelName;
+
+            DataSetClass = MLHelper.GenerateDataSetClass(features, modelName, $"{modelName}Namespace");
             LabelClass = MLHelper.GenerateLabelClass($"{modelName}Label", $"{modelName}LabelNamespace");
-            this.features = mLDataSet.Features;
-
-            List<object> generatedDataSet = CreateDataSet(mLDataSet);
-            MLTypesGenerator typesGenerator = MLHelper.CreateTypesGenarator(DataSetClass, LabelClass);
-
-            IDataView trainingDataView = MLHelper.GetDataView(typesGenerator, generatedDataSet);
-            trainingDataView.Schema.ToList().Add(new DataViewSchema.Column());
-            Model = Train(trainingDataView, "Label");
+            this.features = features;
         }
 
-        private List<object> CreateDataSet(MLDataSet mLDataSet)
+        public TransformerChain<Microsoft.ML.Transforms.KeyToValueMappingTransformer> Train(MLDataRow[] dataSetRows, string labelFieldName)
+        {
+            this.labelFieldName = labelFieldName;
+            List<object> generatedDataSet = CreateDataSet(dataSetRows);
+            TypesGenerator = MLHelper.CreateTypesGenarator(DataSetClass, LabelClass);
+
+            IDataView trainingDataView = MLHelper.GetDataView(TypesGenerator, generatedDataSet);
+            trainingDataView.Schema.ToList().Add(new DataViewSchema.Column());
+            Model = Train(trainingDataView, labelFieldName);
+            return Model;
+        }
+
+        private List<object> CreateDataSet(MLDataRow[] mLDataSet)
         {
             List<object> generatedDataSet = new List<object>();
 
-            foreach (MLDataRow row in mLDataSet.Rows)
+            foreach (MLDataRow row in mLDataSet)
             {
-                object newSet = DataSetClass.GetInstance();
-                foreach (var field in row.Data)
-                {
-                    newSet.GetType().GetField(field.Key).SetValue(newSet, field.Value);
-                }
+                generatedDataSet.Add(ParseRowToObject(row));
             }
 
             return generatedDataSet;
+        }
 
+        public object ParseRowToObject(MLDataRow row)
+        {
+            object newSet = DataSetClass.GetInstance();
+            foreach (var field in row.Data)
+            {
+                newSet.GetType().GetField(field.Key).SetValue(newSet, field.Value);
+            }
+            return newSet;
         }
 
         private TransformerChain<Microsoft.ML.Transforms.KeyToValueMappingTransformer> Train(IDataView trainingDataView, string mapValueToKey)
@@ -57,9 +72,9 @@ namespace ConsoleApp
             features.ToList()
                 .Where(p => p.Name != mapValueToKey).ToList()
                 .ForEach((p) =>
-                    {
-                        fields.Add(p.Name);
-                    });
+                {
+                    fields.Add(p.Name);
+                });
 
             var pipeline = mlContext.Transforms.Conversion.MapValueToKey(mapValueToKey)
                 .Append(mlContext.Transforms.Concatenate("Features", fields.ToArray()))
@@ -78,6 +93,11 @@ namespace ConsoleApp
             var prediction = MLHelper.Predict(predictionEngine, DataSetClass, example);
 
             return prediction;
+        }
+
+        public object Predict(MLDataRow example)
+        {
+            return Predict(ParseRowToObject(example));
         }
     }
 }

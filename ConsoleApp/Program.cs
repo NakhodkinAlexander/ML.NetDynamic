@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DynamicStructure;
 using System.Collections;
+using Decisions.ML;
 
 namespace ConsoleApp
 {
@@ -13,43 +14,22 @@ namespace ConsoleApp
     {
         static void Main(string[] args)
         {
-            MLContext mlContext = new MLContext();
+            LoadData();
 
-            ClassGenerator classGenerator = MLHelper.GenerateDataSetClass(typeof(IrisData), "TestIris", "IrisNamespace");
-            ClassGenerator labelClassGenerator = MLHelper.GenerateLabelClass("IrisLabel", "IrisLabelNamespace");
+            MLModel mLModel = new MLModel(mLData.Features, "TestModelName");
+            mLModel.Train(mLData.Rows, "Label");
 
-            List<object> generatedDataSet = new List<object>();
+            MLDataRow exampleRow = new MLDataRow();
+            exampleRow.Data = new Dictionary<string, object>();
+            exampleRow.Data.Add("SepalLength", 5.9f);
+            exampleRow.Data.Add("SepalWidth", 3.0f);
+            exampleRow.Data.Add("PetalLength", 5.1f);
+            exampleRow.Data.Add("PetalWidth", 1.8f);
+            exampleRow.Data.Add("Label", "Iris-setosa");
 
-            dataset.ToList().ForEach((d) =>
-            {
-                generatedDataSet.Add(CopyObjectFields(d, classGenerator.GetInstance()));
-            });
+            dynamic dynamic = mLModel.Predict(exampleRow);
 
-            MLTypesGenerator typesGenerator = MLHelper.CreateTypesGenarator(classGenerator, labelClassGenerator);
-
-            IDataView trainingDataView = MLHelper.GetDataView(typesGenerator, generatedDataSet);
-            trainingDataView.Schema.ToList().Add(new DataViewSchema.Column());
-
-            var pipeline = mlContext.Transforms.Conversion.MapValueToKey("Label")
-                .Append(mlContext.Transforms.Concatenate("Features", new string[] { "SepalLength", "SepalWidth", "PetalLength", "PetalWidth" }))
-                .AppendCacheCheckpoint(mlContext)
-                .Append(mlContext.MulticlassClassification.Trainers.StochasticDualCoordinateAscent(labelColumnName: "Label", featureColumnName: "Features"))
-                .Append(mlContext.Transforms.Conversion.MapKeyToValue("PredictedLabel"));
-
-            TransformerChain<Microsoft.ML.Transforms.KeyToValueMappingTransformer> model = pipeline.Fit(trainingDataView);
-
-            var predictionEngine = MLHelper.GetPredictionEngine(typesGenerator, model);
-            var methodInfo = predictionEngine.GetType().GetMethod("Predict", new[] { classGenerator.ClassType });
-
-            var prediction = MLHelper.Predict(predictionEngine, classGenerator, CopyObjectFields(new IrisData()
-            {
-                SepalLength = 5.9f,
-                SepalWidth = 3.0f,
-                PetalLength = 5.1f,
-                PetalWidth = 1.8f,
-            }, classGenerator.GetInstance()));
-
-            Console.WriteLine(prediction.ToString());
+            Console.WriteLine(dynamic.PredictedLabels);
 
             Console.ReadLine();
         }
@@ -65,176 +45,326 @@ namespace ConsoleApp
             return newClass;
         }
 
-        public class IrisData
+        private static MLDataSet mLData = new MLDataSet()
         {
-            public float SepalLength;
+            Features = new MLFeature[]
+            {
+                new MLFeature(){ Name = "SepalLength", Type = typeof(float) },
+                new MLFeature(){ Name = "SepalWidth", Type = typeof(float) },
+                new MLFeature(){ Name = "PetalLength", Type = typeof(float) },
+                new MLFeature(){ Name = "PetalWidth", Type = typeof(float) },
+                new MLFeature(){ Name = "Label", Type = typeof(string) },
+            }
+        };
 
-            public float SepalWidth;
-
-            public float PetalLength;
-
-            public float PetalWidth;
-
-            public string Label;
-        }
-
-        public class IrisPrediction
+        private static void LoadData()
         {
-            [ColumnName("PredictedLabel")]
-            public string PredictedLabels;
-        }
+            List<MLDataRow> mLDataRows = new List<MLDataRow>();
 
-        private static readonly IrisData[] dataset = new IrisData[] {
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.5f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.9f, SepalWidth = 3.0f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.7f, SepalWidth = 3.2f, PetalLength = 1.3f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.6f, SepalWidth = 3.1f, PetalLength = 1.5f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.6f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.4f, SepalWidth = 3.9f, PetalLength = 1.7f, PetalWidth = 0.4f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.6f, SepalWidth = 3.4f, PetalLength = 1.4f, PetalWidth = 0.3f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.4f, PetalLength = 1.5f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.4f, SepalWidth = 2.9f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.9f, SepalWidth = 3.1f, PetalLength = 1.5f, PetalWidth = 0.1f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.4f, SepalWidth = 3.7f, PetalLength = 1.5f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.8f, SepalWidth = 3.4f, PetalLength = 1.6f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.8f, SepalWidth = 3.0f, PetalLength = 1.4f, PetalWidth = 0.1f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.3f, SepalWidth = 3.0f, PetalLength = 1.1f, PetalWidth = 0.1f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.8f, SepalWidth = 4.0f, PetalLength = 1.2f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 4.4f, PetalLength = 1.5f, PetalWidth = 0.4f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.4f, SepalWidth = 3.9f, PetalLength = 1.3f, PetalWidth = 0.4f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.5f, PetalLength = 1.4f, PetalWidth = 0.3f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 3.8f, PetalLength = 1.7f, PetalWidth = 0.3f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.8f, PetalLength = 1.5f, PetalWidth = 0.3f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.4f, SepalWidth = 3.4f, PetalLength = 1.7f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.7f, PetalLength = 1.5f, PetalWidth = 0.4f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.6f, SepalWidth = 3.6f, PetalLength = 1.0f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.3f, PetalLength = 1.7f, PetalWidth = 0.5f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.8f, SepalWidth = 3.4f, PetalLength = 1.9f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.0f, PetalLength = 1.6f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.4f, PetalLength = 1.6f, PetalWidth = 0.4f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.2f, SepalWidth = 3.5f, PetalLength = 1.5f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.2f, SepalWidth = 3.4f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.7f, SepalWidth = 3.2f, PetalLength = 1.6f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.8f, SepalWidth = 3.1f, PetalLength = 1.6f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.4f, SepalWidth = 3.4f, PetalLength = 1.5f, PetalWidth = 0.4f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.2f, SepalWidth = 4.1f, PetalLength = 1.5f, PetalWidth = 0.1f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.5f, SepalWidth = 4.2f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.9f, SepalWidth = 3.1f, PetalLength = 1.5f, PetalWidth = 0.1f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.2f, PetalLength = 1.2f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.5f, SepalWidth = 3.5f, PetalLength = 1.3f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.9f, SepalWidth = 3.1f, PetalLength = 1.5f, PetalWidth = 0.1f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.4f, SepalWidth = 3.0f, PetalLength = 1.3f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.4f, PetalLength = 1.5f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.5f, PetalLength = 1.3f, PetalWidth = 0.3f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.5f, SepalWidth = 2.3f, PetalLength = 1.3f, PetalWidth = 0.3f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.4f, SepalWidth = 3.2f, PetalLength = 1.3f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.5f, PetalLength = 1.6f, PetalWidth = 0.6f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.8f, PetalLength = 1.9f, PetalWidth = 0.4f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.8f, SepalWidth = 3.0f, PetalLength = 1.4f, PetalWidth = 0.3f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 3.8f, PetalLength = 1.6f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 4.6f, SepalWidth = 3.2f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.3f, SepalWidth = 3.7f, PetalLength = 1.5f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 3.3f, PetalLength = 1.4f, PetalWidth = 0.2f, Label = "Iris-setosa"},
-            new IrisData() { SepalLength = 7.0f, SepalWidth = 3.2f, PetalLength = 4.7f, PetalWidth = 1.4f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.4f, SepalWidth = 3.2f, PetalLength = 4.5f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.9f, SepalWidth = 3.1f, PetalLength = 4.9f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.5f, SepalWidth = 2.3f, PetalLength = 4.0f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.5f, SepalWidth = 2.8f, PetalLength = 4.6f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 2.8f, PetalLength = 4.5f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 3.3f, PetalLength = 4.7f, PetalWidth = 1.6f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 4.9f, SepalWidth = 2.4f, PetalLength = 3.3f, PetalWidth = 1.0f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.6f, SepalWidth = 2.9f, PetalLength = 4.6f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.2f, SepalWidth = 2.7f, PetalLength = 3.9f, PetalWidth = 1.4f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 2.0f, PetalLength = 3.5f, PetalWidth = 1.0f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.9f, SepalWidth = 3.0f, PetalLength = 4.2f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.0f, SepalWidth = 2.2f, PetalLength = 4.0f, PetalWidth = 1.0f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.1f, SepalWidth = 2.9f, PetalLength = 4.7f, PetalWidth = 1.4f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.6f, SepalWidth = 2.9f, PetalLength = 3.6f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 3.1f, PetalLength = 4.4f, PetalWidth = 1.4f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.6f, SepalWidth = 3.0f, PetalLength = 4.5f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.8f, SepalWidth = 2.7f, PetalLength = 4.1f, PetalWidth = 1.0f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.2f, SepalWidth = 2.2f, PetalLength = 4.5f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.6f, SepalWidth = 2.5f, PetalLength = 3.9f, PetalWidth = 1.1f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.9f, SepalWidth = 3.2f, PetalLength = 4.8f, PetalWidth = 1.8f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.1f, SepalWidth = 2.8f, PetalLength = 4.0f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 2.5f, PetalLength = 4.9f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.1f, SepalWidth = 2.8f, PetalLength = 4.7f, PetalWidth = 1.2f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.4f, SepalWidth = 2.9f, PetalLength = 4.3f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.6f, SepalWidth = 3.0f, PetalLength = 4.4f, PetalWidth = 1.4f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.8f, SepalWidth = 2.8f, PetalLength = 4.8f, PetalWidth = 1.4f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 3.0f, PetalLength = 5.0f, PetalWidth = 1.7f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.0f, SepalWidth = 2.9f, PetalLength = 4.5f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 2.6f, PetalLength = 3.5f, PetalWidth = 1.0f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.5f, SepalWidth = 2.4f, PetalLength = 3.8f, PetalWidth = 1.1f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.5f, SepalWidth = 2.4f, PetalLength = 3.7f, PetalWidth = 1.0f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.8f, SepalWidth = 2.7f, PetalLength = 3.9f, PetalWidth = 1.2f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.0f, SepalWidth = 2.7f, PetalLength = 5.1f, PetalWidth = 1.6f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.4f, SepalWidth = 3.0f, PetalLength = 4.5f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.0f, SepalWidth = 3.4f, PetalLength = 4.5f, PetalWidth = 1.6f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 3.1f, PetalLength = 4.7f, PetalWidth = 1.5f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 2.3f, PetalLength = 4.4f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.6f, SepalWidth = 3.0f, PetalLength = 4.1f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.5f, SepalWidth = 2.5f, PetalLength = 4.0f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.5f, SepalWidth = 2.6f, PetalLength = 4.4f, PetalWidth = 1.2f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.1f, SepalWidth = 3.0f, PetalLength = 4.6f, PetalWidth = 1.4f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.8f, SepalWidth = 2.6f, PetalLength = 4.0f, PetalWidth = 1.2f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.0f, SepalWidth = 2.3f, PetalLength = 3.3f, PetalWidth = 1.0f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.6f, SepalWidth = 2.7f, PetalLength = 4.2f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 3.0f, PetalLength = 4.2f, PetalWidth = 1.2f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 2.9f, PetalLength = 4.2f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.2f, SepalWidth = 2.9f, PetalLength = 4.3f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.1f, SepalWidth = 2.5f, PetalLength = 3.0f, PetalWidth = 1.1f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 2.8f, PetalLength = 4.1f, PetalWidth = 1.3f, Label = "Iris-versicolor"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 3.3f, PetalLength = 6.0f, PetalWidth = 2.5f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 5.8f, SepalWidth = 2.7f, PetalLength = 5.1f, PetalWidth = 1.9f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.1f, SepalWidth = 3.0f, PetalLength = 5.9f, PetalWidth = 2.1f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 2.9f, PetalLength = 5.6f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.5f, SepalWidth = 3.0f, PetalLength = 5.8f, PetalWidth = 2.2f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.6f, SepalWidth = 3.0f, PetalLength = 6.6f, PetalWidth = 2.1f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 4.9f, SepalWidth = 2.5f, PetalLength = 4.5f, PetalWidth = 1.7f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.3f, SepalWidth = 2.9f, PetalLength = 6.3f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 2.5f, PetalLength = 5.8f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.2f, SepalWidth = 3.6f, PetalLength = 6.1f, PetalWidth = 2.5f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.5f, SepalWidth = 3.2f, PetalLength = 5.1f, PetalWidth = 2.0f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.4f, SepalWidth = 2.7f, PetalLength = 5.3f, PetalWidth = 1.9f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.8f, SepalWidth = 3.0f, PetalLength = 5.5f, PetalWidth = 2.1f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 5.7f, SepalWidth = 2.5f, PetalLength = 5.0f, PetalWidth = 2.0f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 5.8f, SepalWidth = 2.8f, PetalLength = 5.1f, PetalWidth = 2.4f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.4f, SepalWidth = 3.2f, PetalLength = 5.3f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.5f, SepalWidth = 3.0f, PetalLength = 5.5f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.7f, SepalWidth = 3.8f, PetalLength = 6.7f, PetalWidth = 2.2f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.7f, SepalWidth = 2.6f, PetalLength = 6.9f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.0f, SepalWidth = 2.2f, PetalLength = 5.0f, PetalWidth = 1.5f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.9f, SepalWidth = 3.2f, PetalLength = 5.7f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 5.6f, SepalWidth = 2.8f, PetalLength = 4.9f, PetalWidth = 2.0f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.7f, SepalWidth = 2.8f, PetalLength = 6.7f, PetalWidth = 2.0f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 2.7f, PetalLength = 4.9f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 3.3f, PetalLength = 5.7f, PetalWidth = 2.1f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.2f, SepalWidth = 3.2f, PetalLength = 6.0f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.2f, SepalWidth = 2.8f, PetalLength = 4.8f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.1f, SepalWidth = 3.0f, PetalLength = 4.9f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.4f, SepalWidth = 2.8f, PetalLength = 5.6f, PetalWidth = 2.1f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.2f, SepalWidth = 3.0f, PetalLength = 5.8f, PetalWidth = 1.6f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.4f, SepalWidth = 2.8f, PetalLength = 6.1f, PetalWidth = 1.9f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.9f, SepalWidth = 3.8f, PetalLength = 6.4f, PetalWidth = 2.0f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.4f, SepalWidth = 2.8f, PetalLength = 5.6f, PetalWidth = 2.2f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 2.8f, PetalLength = 5.1f, PetalWidth = 1.5f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.1f, SepalWidth = 2.6f, PetalLength = 5.6f, PetalWidth = 1.4f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 7.7f, SepalWidth = 3.0f, PetalLength = 6.1f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 3.4f, PetalLength = 5.6f, PetalWidth = 2.4f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.4f, SepalWidth = 3.1f, PetalLength = 5.5f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.0f, SepalWidth = 3.0f, PetalLength = 4.8f, PetalWidth = 1.8f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.9f, SepalWidth = 3.1f, PetalLength = 5.4f, PetalWidth = 2.1f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 3.1f, PetalLength = 5.6f, PetalWidth = 2.4f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.9f, SepalWidth = 3.1f, PetalLength = 5.1f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 5.8f, SepalWidth = 2.7f, PetalLength = 5.1f, PetalWidth = 1.9f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.8f, SepalWidth = 3.2f, PetalLength = 5.9f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 3.3f, PetalLength = 5.7f, PetalWidth = 2.5f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.7f, SepalWidth = 3.0f, PetalLength = 5.2f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.3f, SepalWidth = 2.5f, PetalLength = 5.0f, PetalWidth = 1.9f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.5f, SepalWidth = 3.0f, PetalLength = 5.2f, PetalWidth = 2.0f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 6.2f, SepalWidth = 3.4f, PetalLength = 5.4f, PetalWidth = 2.3f, Label = "Iris-virginica"},
-            new IrisData() { SepalLength = 5.9f, SepalWidth = 3.0f, PetalLength = 5.1f, PetalWidth = 1.8f, Label = "Iris-virginica"}
-    };
+            MLDataRow newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); 
+
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.5f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.9f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.7f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 1.3f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.6f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.6f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.4f); newRow.Data.Add("SepalWidth", 3.9f); newRow.Data.Add("PetalLength", 1.7f); newRow.Data.Add("PetalWidth", 0.4f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.6f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.3f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.4f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.9f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.1f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.4f); newRow.Data.Add("SepalWidth", 3.7f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.8f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.6f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.8f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.1f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.3f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 1.1f); newRow.Data.Add("PetalWidth", 0.1f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.8f); newRow.Data.Add("SepalWidth", 4.0f); newRow.Data.Add("PetalLength", 1.2f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 4.4f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.4f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.4f); newRow.Data.Add("SepalWidth", 3.9f); newRow.Data.Add("PetalLength", 1.3f); newRow.Data.Add("PetalWidth", 0.4f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.5f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.3f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 3.8f); newRow.Data.Add("PetalLength", 1.7f); newRow.Data.Add("PetalWidth", 0.3f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.8f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.3f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.4f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.7f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.7f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.4f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.6f); newRow.Data.Add("SepalWidth", 3.6f); newRow.Data.Add("PetalLength", 1.0f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.3f); newRow.Data.Add("PetalLength", 1.7f); newRow.Data.Add("PetalWidth", 0.5f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.8f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.9f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 1.6f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.6f); newRow.Data.Add("PetalWidth", 0.4f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.2f); newRow.Data.Add("SepalWidth", 3.5f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.2f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.7f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 1.6f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.8f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 1.6f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.4f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.4f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.2f); newRow.Data.Add("SepalWidth", 4.1f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.1f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.5f); newRow.Data.Add("SepalWidth", 4.2f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.9f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.1f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 1.2f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.5f); newRow.Data.Add("SepalWidth", 3.5f); newRow.Data.Add("PetalLength", 1.3f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.9f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.1f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.4f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 1.3f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.5f); newRow.Data.Add("PetalLength", 1.3f); newRow.Data.Add("PetalWidth", 0.3f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.5f); newRow.Data.Add("SepalWidth", 2.3f); newRow.Data.Add("PetalLength", 1.3f); newRow.Data.Add("PetalWidth", 0.3f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.4f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 1.3f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.5f); newRow.Data.Add("PetalLength", 1.6f); newRow.Data.Add("PetalWidth", 0.6f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.8f); newRow.Data.Add("PetalLength", 1.9f); newRow.Data.Add("PetalWidth", 0.4f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.8f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.3f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 3.8f); newRow.Data.Add("PetalLength", 1.6f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.6f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.3f); newRow.Data.Add("SepalWidth", 3.7f); newRow.Data.Add("PetalLength", 1.5f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 3.3f); newRow.Data.Add("PetalLength", 1.4f); newRow.Data.Add("PetalWidth", 0.2f); newRow.Data.Add("Label", "Iris-setosa");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.0f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 4.7f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.4f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.9f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 4.9f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.5f); newRow.Data.Add("SepalWidth", 2.3f); newRow.Data.Add("PetalLength", 4.0f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.5f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.6f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 3.3f); newRow.Data.Add("PetalLength", 4.7f); newRow.Data.Add("PetalWidth", 1.6f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.9f); newRow.Data.Add("SepalWidth", 2.4f); newRow.Data.Add("PetalLength", 3.3f); newRow.Data.Add("PetalWidth", 1.0f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.6f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 4.6f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.2f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 3.9f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 2.0f); newRow.Data.Add("PetalLength", 3.5f); newRow.Data.Add("PetalWidth", 1.0f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.9f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.2f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.0f); newRow.Data.Add("SepalWidth", 2.2f); newRow.Data.Add("PetalLength", 4.0f); newRow.Data.Add("PetalWidth", 1.0f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.1f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 4.7f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.6f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 3.6f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 4.4f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.6f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.8f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 4.1f); newRow.Data.Add("PetalWidth", 1.0f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.2f); newRow.Data.Add("SepalWidth", 2.2f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.6f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 3.9f); newRow.Data.Add("PetalWidth", 1.1f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.9f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 4.8f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.1f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.0f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 4.9f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.1f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.7f); newRow.Data.Add("PetalWidth", 1.2f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.4f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 4.3f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.6f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.4f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.8f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.8f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.0f); newRow.Data.Add("PetalWidth", 1.7f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.0f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 2.6f); newRow.Data.Add("PetalLength", 3.5f); newRow.Data.Add("PetalWidth", 1.0f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.5f); newRow.Data.Add("SepalWidth", 2.4f); newRow.Data.Add("PetalLength", 3.8f); newRow.Data.Add("PetalWidth", 1.1f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.5f); newRow.Data.Add("SepalWidth", 2.4f); newRow.Data.Add("PetalLength", 3.7f); newRow.Data.Add("PetalWidth", 1.0f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.8f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 3.9f); newRow.Data.Add("PetalWidth", 1.2f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.0f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 1.6f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.4f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.0f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.6f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 4.7f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 2.3f); newRow.Data.Add("PetalLength", 4.4f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.6f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.1f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.5f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 4.0f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.5f); newRow.Data.Add("SepalWidth", 2.6f); newRow.Data.Add("PetalLength", 4.4f); newRow.Data.Add("PetalWidth", 1.2f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.1f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.6f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.8f); newRow.Data.Add("SepalWidth", 2.6f); newRow.Data.Add("PetalLength", 4.0f); newRow.Data.Add("PetalWidth", 1.2f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.0f); newRow.Data.Add("SepalWidth", 2.3f); newRow.Data.Add("PetalLength", 3.3f); newRow.Data.Add("PetalWidth", 1.0f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.6f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 4.2f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.2f); newRow.Data.Add("PetalWidth", 1.2f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 4.2f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.2f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 4.3f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.1f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 3.0f); newRow.Data.Add("PetalWidth", 1.1f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.1f); newRow.Data.Add("PetalWidth", 1.3f); newRow.Data.Add("Label", "Iris-versicoor");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 3.3f); newRow.Data.Add("PetalLength", 6.0f); newRow.Data.Add("PetalWidth", 2.5f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.8f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 1.9f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.1f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.9f); newRow.Data.Add("PetalWidth", 2.1f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 5.6f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.5f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.8f); newRow.Data.Add("PetalWidth", 2.2f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.6f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 6.6f); newRow.Data.Add("PetalWidth", 2.1f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 4.9f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 4.5f); newRow.Data.Add("PetalWidth", 1.7f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.3f); newRow.Data.Add("SepalWidth", 2.9f); newRow.Data.Add("PetalLength", 6.3f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 5.8f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.2f); newRow.Data.Add("SepalWidth", 3.6f); newRow.Data.Add("PetalLength", 6.1f); newRow.Data.Add("PetalWidth", 2.5f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.5f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 2.0f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.4f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 5.3f); newRow.Data.Add("PetalWidth", 1.9f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.8f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.5f); newRow.Data.Add("PetalWidth", 2.1f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.7f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 5.0f); newRow.Data.Add("PetalWidth", 2.0f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.8f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 2.4f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.4f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 5.3f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.5f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.5f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.7f); newRow.Data.Add("SepalWidth", 3.8f); newRow.Data.Add("PetalLength", 6.7f); newRow.Data.Add("PetalWidth", 2.2f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.7f); newRow.Data.Add("SepalWidth", 2.6f); newRow.Data.Add("PetalLength", 6.9f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.0f); newRow.Data.Add("SepalWidth", 2.2f); newRow.Data.Add("PetalLength", 5.0f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.9f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 5.7f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.6f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.9f); newRow.Data.Add("PetalWidth", 2.0f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.7f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 6.7f); newRow.Data.Add("PetalWidth", 2.0f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 4.9f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 3.3f); newRow.Data.Add("PetalLength", 5.7f); newRow.Data.Add("PetalWidth", 2.1f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.2f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 6.0f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.2f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 4.8f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.1f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.9f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.4f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 5.6f); newRow.Data.Add("PetalWidth", 2.1f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.2f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.8f); newRow.Data.Add("PetalWidth", 1.6f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.4f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 6.1f); newRow.Data.Add("PetalWidth", 1.9f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.9f); newRow.Data.Add("SepalWidth", 3.8f); newRow.Data.Add("PetalLength", 6.4f); newRow.Data.Add("PetalWidth", 2.0f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.4f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 5.6f); newRow.Data.Add("PetalWidth", 2.2f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 2.8f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 1.5f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.1f); newRow.Data.Add("SepalWidth", 2.6f); newRow.Data.Add("PetalLength", 5.6f); newRow.Data.Add("PetalWidth", 1.4f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 7.7f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 6.1f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 5.6f); newRow.Data.Add("PetalWidth", 2.4f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.4f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 5.5f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.0f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 4.8f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.9f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 5.4f); newRow.Data.Add("PetalWidth", 2.1f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 5.6f); newRow.Data.Add("PetalWidth", 2.4f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.9f); newRow.Data.Add("SepalWidth", 3.1f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.8f); newRow.Data.Add("SepalWidth", 2.7f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 1.9f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.8f); newRow.Data.Add("SepalWidth", 3.2f); newRow.Data.Add("PetalLength", 5.9f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 3.3f); newRow.Data.Add("PetalLength", 5.7f); newRow.Data.Add("PetalWidth", 2.5f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.7f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.2f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.3f); newRow.Data.Add("SepalWidth", 2.5f); newRow.Data.Add("PetalLength", 5.0f); newRow.Data.Add("PetalWidth", 1.9f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.5f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.2f); newRow.Data.Add("PetalWidth", 2.0f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 6.2f); newRow.Data.Add("SepalWidth", 3.4f); newRow.Data.Add("PetalLength", 5.4f); newRow.Data.Add("PetalWidth", 2.3f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+            newRow = new MLDataRow(); newRow.Data = new Dictionary<string, object>(); newRow.Data.Add("SepalLength", 5.9f); newRow.Data.Add("SepalWidth", 3.0f); newRow.Data.Add("PetalLength", 5.1f); newRow.Data.Add("PetalWidth", 1.8f); newRow.Data.Add("Label", "Iris-virginia");
+            mLDataRows.Add(newRow);
+
+            mLData.Rows = mLDataRows.ToArray();
+        }
     }
 }
